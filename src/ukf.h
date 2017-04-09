@@ -6,6 +6,7 @@
 #include <vector>
 #include <string>
 #include <fstream>
+#include <cmath>
 #include "tools.h"
 
 using Eigen::MatrixXd;
@@ -29,8 +30,14 @@ public:
   ///* state covariance matrix
   MatrixXd P_;
 
+  ///* generated sigma points matrix
+  MatrixXd Xsig_aug_;
+
   ///* predicted sigma points matrix
   MatrixXd Xsig_pred_;
+
+  // previous timestamp
+  long previous_timestamp_;
 
   ///* time when the state is true, in us
   long long time_us_;
@@ -91,11 +98,28 @@ public:
   void ProcessMeasurement(MeasurementPackage meas_package);
 
   /**
-   * Prediction Predicts sigma points, the state, and the state covariance
-   * matrix
-   * @param delta_t Time between k and k+1 in s
+   * Initialize First measurement initialization
+   * @param meas_package
    */
-  void Prediction(double delta_t);
+  void Initialize(MeasurementPackage meas_package);
+
+  /**
+   * Sigma points generation
+   */
+  void GenerateSigmaPoints();
+
+  /**
+   * Sigma points prediction
+   * @param delta_t
+   */
+  void PredictSigmaPoints(double delta_t);
+
+  /**
+   * State mean and covariance prediction
+   */
+  void PredictMeanCovariance();
+
+  double CalculateNIS(const VectorXd &z, const VectorXd &z_pred, const MatrixXd &Sinv);
 
   /**
    * Updates the state and the state covariance matrix using a laser measurement
