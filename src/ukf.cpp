@@ -13,7 +13,7 @@ using std::vector;
  */
 UKF::UKF() {
   // if this is false, laser measurements will be ignored (except during init)
-  use_laser_ = false;
+  use_laser_ = true;
 
   // if this is false, radar measurements will be ignored (except during init)
   use_radar_ = true;
@@ -236,6 +236,74 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
 
   You'll also need to calculate the lidar NIS.
   */
+
+
+  // Laser measurement space dimension
+  int n_z = 2;
+
+  // Matrix for sigma points in radar measurement space
+  MatrixXd Zsig = MatrixXd(n_z, 2 * n_aug_ + 1);
+
+  // Mean predicted measurement
+  VectorXd z_pred = VectorXd(n_z);
+
+  // Measurement covariance matrix S
+  MatrixXd S = MatrixXd(n_z, n_z);
+
+  // Transform sigma points into measurement space
+  for(int j=0; j < Xsig_pred_.cols(); j++) {
+    VectorXd input = Xsig_pred_.col(j);
+    VectorXd out = VectorXd(n_z);
+    out << input[0], input[1];
+    Zsig.col(j) = out;
+  }
+
+  // Calculate mean predicted measurement
+  z_pred.fill(0.0);
+  for(int j=0; j < Zsig.cols(); j++) {
+    z_pred += weights_[j] * Zsig.col(j);
+  }
+
+  // Calculate measurement covariance matrix S
+  MatrixXd R = MatrixXd::Zero(n_z, n_z);
+  R(0, 0) = std_laspx_ * std_laspx_;
+  R(1, 1) = std_laspy_ * std_laspy_;
+
+  S.fill(0.0);
+  for(int j=0; j < Zsig.cols(); j++) {
+    MatrixXd Zdiff = Zsig.col(j) - z_pred;
+    S += weights_[j] * Zdiff * Zdiff.transpose();
+  }
+  S += R;
+
+  // Matrix for cross correlation Tc
+  MatrixXd Tc = MatrixXd::Zero(n_x_, n_z);
+  for (int j=0; j < Xsig_pred_.cols(); j++) {
+    VectorXd diffX = Xsig_pred_.col(j) - x_;
+    //angle normalization
+    while (diffX(3)> M_PI) diffX(3)-=2.*M_PI;
+    while (diffX(3)<-M_PI) diffX(3)+=2.*M_PI;
+
+    VectorXd diffZ = Zsig.col(j) - z_pred;
+    Tc += weights_[j] * diffX * diffZ.transpose();
+  }
+
+  // Calculate Kalman gain K;
+  MatrixXd Sinv = S.inverse();
+  MatrixXd K = Tc * Sinv;
+
+  // Update state mean and covariance matrix
+  VectorXd z = meas_package.raw_measurements_;
+  VectorXd diffZ = z - z_pred;
+
+  x_ = x_ + K * diffZ;
+  P_ = P_ - K * S * K.transpose();
+
+  //angle normalization
+  while (x_(3)> M_PI) x_(3)-=2.*M_PI;
+  while (x_(3)<-M_PI) x_(3)+=2.*M_PI;
+
+  NIS_laser_ = CalculateNIS(z, z_pred, Sinv);
 }
 
 /**
@@ -243,15 +311,6 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
  * @param {MeasurementPackage} meas_package
  */
 void UKF::UpdateRadar(MeasurementPackage meas_package) {
-  /**
-  TODO:
-
-  Complete this function! Use radar data to update the belief about the object's
-  position. Modify the state vector, x_, and covariance, P_.
-
-  You'll also need to calculate the radar NIS.
-  */
-
   // Radar measurement space dimension
   int n_z = 3;
 
@@ -267,7 +326,7 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
   // Transform sigma points into measurement space
   for(int j=0; j < Xsig_pred_.cols(); j++) {
     VectorXd input = Xsig_pred_.col(j);
-    VectorXd out = VectorXd(3);
+    VectorXd out = VectorXd(n_z);
 
     double sq =  std::sqrt(std::pow(input[0], 2) + std::pow(input[1], 2));
     out << sq,
