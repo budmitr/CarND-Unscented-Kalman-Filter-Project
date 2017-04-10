@@ -25,10 +25,10 @@ UKF::UKF() {
   P_ = MatrixXd(5, 5);
 
   // Process noise standard deviation longitudinal acceleration in m/s^2
-  std_a_ = 6;
+  std_a_ = 0.5;
 
   // Process noise standard deviation yaw acceleration in rad/s^2
-  std_yawdd_ = 6;
+  std_yawdd_ = 0.5;
 
   // Laser measurement noise standard deviation position1 in m
   std_laspx_ = 0.15;
@@ -72,13 +72,6 @@ UKF::~UKF() {}
  * either radar or laser.
  */
 void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
-  /**
-  TODO:
-
-  Complete this function! Make sure you switch between lidar and radar
-  measurements.
-  */
-
   // INITIALIZE
   if (!is_initialized_) {
     Initialize(meas_package);
@@ -128,11 +121,11 @@ void UKF::Initialize(MeasurementPackage meas_package) {
   }
 
   // Initialize state covariance matrix (with big variance for v, ksi and ksi_rate)
-  P_ << 1, 0, 0,   0,   0,
-        0, 1, 0,   0,   0,
-        0, 0, 999, 0,   0,
-        0, 0, 0,   999, 0,
-        0, 0, 0,   0,   999;
+  P_ << 1, 0, 0, 0, 0,
+        0, 1, 0, 0, 0,
+        0, 0, 9, 0, 0,
+        0, 0, 0, 6, 0,
+        0, 0, 0, 0, 3;
 
   // Initialize timestamp
   previous_timestamp_ = meas_package.timestamp_;
@@ -228,16 +221,6 @@ void UKF::PredictMeanCovariance() {
  * @param {MeasurementPackage} meas_package
  */
 void UKF::UpdateLidar(MeasurementPackage meas_package) {
-  /**
-  TODO:
-
-  Complete this function! Use lidar data to update the belief about the object's
-  position. Modify the state vector, x_, and covariance, P_.
-
-  You'll also need to calculate the lidar NIS.
-  */
-
-
   // Laser measurement space dimension
   int n_z = 2;
 
@@ -253,9 +236,7 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
   // Transform sigma points into measurement space
   for(int j=0; j < Xsig_pred_.cols(); j++) {
     VectorXd input = Xsig_pred_.col(j);
-    VectorXd out = VectorXd(n_z);
-    out << input[0], input[1];
-    Zsig.col(j) = out;
+    Zsig.col(j) << input[0], input[1];
   }
 
   // Calculate mean predicted measurement
@@ -329,6 +310,9 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
     VectorXd out = VectorXd(n_z);
 
     double sq =  std::sqrt(std::pow(input[0], 2) + std::pow(input[1], 2));
+    if (sq < 0.0001)
+      sq = 0.0001;
+
     out << sq,
            std::atan2(input[1], input[0]),
            (input[0] * std::cos(input[3]) * input[2] + input[1] * std::sin(input[3]) * input[2]) / sq;
@@ -395,14 +379,13 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
   while (x_(3)> M_PI) x_(3)-=2.*M_PI;
   while (x_(3)<-M_PI) x_(3)+=2.*M_PI;
 
-//  std::cout << "Updated x" << std::endl << x_ << std::endl << std::endl;
-//  std::cout << "Updated P" << std::endl << P_ << std::endl << std::endl;
-
   NIS_radar_ = CalculateNIS(z, z_pred, Sinv);
 }
 
 
 double UKF::CalculateNIS(const VectorXd &z, const VectorXd &z_pred, const MatrixXd &Sinv) {
   VectorXd zdiff = z - z_pred;
-  return zdiff.transpose() * Sinv * zdiff;
+  double NIS = zdiff.transpose() * Sinv * zdiff;
+  std::cout << NIS << std::endl;
+  return NIS;
 }
